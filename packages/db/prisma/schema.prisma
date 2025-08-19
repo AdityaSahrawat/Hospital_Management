@@ -1,0 +1,74 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+
+model Staff {
+  id              Int       @id @default(autoincrement())
+  specialization  String
+  departmentId    Int?
+  isAvailable     Boolean   @default(true)
+  department      Department? @relation(fields: [departmentId], references: [id])
+}
+
+
+
+model Department {
+  id              Int       @id @default(autoincrement())
+  name            String
+  beds            Bed[]
+  staff           Staff[]
+}
+
+model Bed {
+  id              Int       @id @default(autoincrement())
+  type            String
+  status          String
+  departmentId    Int
+  department      Department @relation(fields: [departmentId], references: [id])
+}
+
+model Disease {
+  id              Int           @id @default(autoincrement())
+  name            String        @unique
+  subcategories   Subcategory[]
+}
+
+model Subcategory {
+  id              Int           @id @default(autoincrement())
+  name            String
+  disease         Disease       @relation(fields: [diseaseId], references: [id])
+  diseaseId       Int
+  ageGroups       AgeGroup[]
+}
+
+model AgeGroup {
+  id              Int           @id @default(autoincrement())
+  group           String
+  ageRange        String
+  subcategory     Subcategory   @relation(fields: [subcategoryId], references: [id])
+  subcategoryId   Int
+  medicines       Medicine[]
+}
+
+model Medicine {
+  id              String        @id @default(cuid())
+  name            String
+  dosage          String
+  notes           String
+  ageGroup        AgeGroup      @relation(fields: [ageGroupId], references: [id])
+  ageGroupId      Int
+}
