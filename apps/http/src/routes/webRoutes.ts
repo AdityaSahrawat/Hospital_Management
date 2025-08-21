@@ -1,5 +1,19 @@
 import { Router , Request , Response } from "express";
-import {prismaClient} from '@repo/db'
+import {prismaClient , Prisma} from '@repo/db' 
+
+type DiseaseWithRelations = Prisma.DiseaseGetPayload<{
+  include: {
+    subcategories: {
+      include: {
+        ageGroups: {
+          include: {
+            medicines: true;
+          };
+        };
+      };
+    };
+  };
+}>;
 
 type DiseaseInput = {
   name: string;
@@ -19,12 +33,14 @@ const webRouter : Router = Router();
 //DONE
 webRouter.get("/staff", async (req: Request, res: Response) => {
   try {
+    console.log("req came22112r2")
     const staff = await prismaClient.staff.findMany({
       include: { department: true },
     });
+    console.log("rq came awegew8v9i")
     res.json(staff);
   } catch (error) {
-    res.status(500).json({ error: "Failed to fetch staff" });
+    res.status(500).json({ e: "Failed to fetch staff" , error} );
   }
 });
 
@@ -56,6 +72,8 @@ webRouter.post("/staff", async (req: Request, res: Response) => {
   }
 });
 
+
+
 //DONE
 // PUT update staff by id
 webRouter.put("/staff/:id", async (req: Request, res: Response) => {
@@ -75,6 +93,25 @@ webRouter.put("/staff/:id", async (req: Request, res: Response) => {
     });
 
     res.json(updatedStaff);
+  } catch (error) {
+    res.status(400).json({ error: "Failed to update staff" });
+  }
+});
+webRouter.delete("/staff/:id", async (req: Request, res: Response) => {
+  try {
+    if(!req.params.id){
+      return res.status(403).json({
+        message : "no staff id found"
+      })
+    }
+
+    const staffId = parseInt(req.params.id);
+
+    const deletedStaff = await prismaClient.staff.delete({
+      where: { id: staffId },
+    });
+
+    res.json(deletedStaff);
   } catch (error) {
     res.status(400).json({ error: "Failed to update staff" });
   }
@@ -233,6 +270,25 @@ webRouter.put("/beds/:id", async (req: Request, res: Response) => {
   }
 });
 
+webRouter.delete("/beds/:id", async (req: Request, res: Response) => {
+  try {
+
+    if(!req.params.id){
+      return res.status(403).json({
+        message : "no bed id found"
+      })
+    }
+
+    const bedId = parseInt(req.params.id);
+    const deleteBed = await prismaClient.bed.delete({
+      where: { id: bedId },
+    });
+    res.json(deleteBed);
+  } catch (error) {
+    res.status(400).json({ error: "Failed to update bed" });
+  }
+});
+
 /**
  * ========================
  * Disease Routes
@@ -242,9 +298,8 @@ webRouter.put("/beds/:id", async (req: Request, res: Response) => {
 // GET all diseases in website format
 webRouter.get("/diseases", async (req: Request, res: Response) => {
   try {
-    type DiseasesResult = Awaited<ReturnType<typeof prismaClient.disease.findMany>>;
 
-    const diseases : DiseasesResult = await prismaClient.disease.findMany({
+    const diseases : DiseaseWithRelations[] = await prismaClient.disease.findMany({
       include: {
         subcategories: {
           include: {
@@ -256,28 +311,7 @@ webRouter.get("/diseases", async (req: Request, res: Response) => {
       },
     });
 
-    // Transform data to desired format with IDs
-    const formatted = diseases.map((d : DiseasesResult[number]) => ({
-      id: d.id,
-      disease: d.name,
-      subcategories: d.subcategories.map((sc: typeof d.subcategories[number]) => ({
-        id: sc.id,
-        name: sc.name,
-        age_groups: sc.ageGroups.map((ag: typeof sc.ageGroups[number]) => ({
-          id: ag.id,
-          group: ag.group,
-          age_range: ag.ageRange,
-          medicines: ag.medicines.map((m: typeof ag.medicines[number]) => ({
-            id: m.id,
-            name: m.name,
-            dosage: m.dosage,
-            notes: m.notes,
-          })),
-        })),
-      })),
-    }));
-
-    res.json(formatted);
+    res.json(diseases);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch diseases" });
   }
@@ -390,6 +424,25 @@ webRouter.put("/diseases/:id", async (req : Request, res : Response) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to update disease" });
+  }
+});
+
+webRouter.delete("/disease/:id", async (req: Request, res: Response) => {
+  try {
+
+    if(!req.params.id){
+      return res.status(403).json({
+        message : "no bed id found"
+      })
+    }
+
+    const bedId = parseInt(req.params.id);
+    const deleteDisease = await prismaClient.bed.delete({
+      where: { id: bedId },
+    });
+    res.json(deleteDisease);
+  } catch (error) {
+    res.status(400).json({ error: "Failed to update bed" });
   }
 });
 

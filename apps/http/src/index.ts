@@ -10,16 +10,13 @@ const app = express();
 app.use(express.json());
 
 app.use(
-  cors({
-    origin : `http://localhost:${PORT_client}`,
-    credentials: true,
-  })
+  cors()
 );
 
 app.use("/v1/web" , webRouter )
 
 
 
-app.listen(3000, "0.0.0.0", () => {
-  console.log("Server running on port 3000");
+app.listen(3121, "0.0.0.0", () => {
+  console.log("Server running on port 3121");
 });

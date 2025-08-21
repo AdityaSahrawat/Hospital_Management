@@ -1,13 +1,7 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
-  output   = "../src/generated/prisma"
 }
+
 
 datasource db {
   provider = "postgresql"
@@ -15,60 +9,102 @@ datasource db {
 }
 
 
-
 model Staff {
-  id              Int       @id @default(autoincrement())
-  specialization  String
-  departmentId    Int?
-  isAvailable     Boolean   @default(true)
-  department      Department? @relation(fields: [departmentId], references: [id])
+  id             Int         @id @default(autoincrement())
+  name           String
+  specialization String
+  departmentId   Int?
+  isAvailable    Boolean     @default(true)
+  department     Department? @relation(fields: [departmentId], references: [id])
 }
-
 
 
 model Department {
-  id              Int       @id @default(autoincrement())
-  name            String
-  beds            Bed[]
-  staff           Staff[]
+  id    Int     @id @default(autoincrement())
+  name  String
+  beds  Bed[]
+  staff Staff[]
 }
+
+
+enum BedStatus {
+  FREE
+  OCCUPIED
+  MAINTENANCE
+}
+
 
 model Bed {
-  id              Int       @id @default(autoincrement())
-  type            String
-  status          String
-  departmentId    Int
-  department      Department @relation(fields: [departmentId], references: [id])
+  id           Int        @id @default(autoincrement())
+  type         String
+  status       BedStatus
+  departmentId Int
+  department   Department @relation(fields: [departmentId], references: [id])
 }
+
 
 model Disease {
-  id              Int           @id @default(autoincrement())
-  name            String        @unique
-  subcategories   Subcategory[]
+  id            Int           @id @default(autoincrement())
+  name          String        @unique
+  subcategories Subcategory[]
 }
+
 
 model Subcategory {
-  id              Int           @id @default(autoincrement())
-  name            String
-  disease         Disease       @relation(fields: [diseaseId], references: [id])
-  diseaseId       Int
-  ageGroups       AgeGroup[]
+  id        Int        @id @default(autoincrement())
+  name      String
+  diseaseId Int
+  ageGroups AgeGroup[]
+  disease   Disease    @relation(fields: [diseaseId], references: [id])
 }
+
+
+enum AgeGroupEnum {
+  CHILD
+  TEENAGER
+  ADULT
+  OLDER
+}
+
 
 model AgeGroup {
-  id              Int           @id @default(autoincrement())
-  group           String
-  ageRange        String
-  subcategory     Subcategory   @relation(fields: [subcategoryId], references: [id])
-  subcategoryId   Int
-  medicines       Medicine[]
+  id           Int                  @id @default(autoincrement())
+  group        AgeGroupEnum
+  ageRange     String               
+  subcategory  Subcategory          @relation(fields: [subcategoryId], references: [id])
+  subcategoryId Int
+  prescribed   PrescribedMedicine[]
 }
 
+
 model Medicine {
-  id              String        @id @default(cuid())
-  name            String
-  dosage          String
-  notes           String
-  ageGroup        AgeGroup      @relation(fields: [ageGroupId], references: [id])
-  ageGroupId      Int
+  id         Int                  @id @default(autoincrement())
+  name       String               // e.g., Amlodipine
+  form       String               // tablet, syrup, injection
+  strength   String               // e.g., 5mg, 10mg, 100mg/ml
+  unit       String               // mg, ml, IU
+  prescribed PrescribedMedicine[]
+  Inventory  Inventory[]
+}
+
+
+model PrescribedMedicine {
+  id         Int       @id @default(autoincrement())
+  ageGroup   AgeGroup  @relation(fields: [ageGroupId], references: [id])
+  ageGroupId Int
+  medicine   Medicine  @relation(fields: [medicineId], references: [id])
+  medicineId Int
+  dosage     String    // e.g., "5–10 mg once daily"
+  notes      String?
+}
+
+
+model Inventory {
+  id          Int      @id @default(autoincrement())
+  medicine    Medicine @relation(fields: [medicineId], references: [id])
+  medicineId  Int
+  availableQty Int      // number of units in stock (tablets, ml, etc.)
+  batchNumber String?
+  expiryDate  DateTime?
+  updatedAt   DateTime @updatedAt
 }
