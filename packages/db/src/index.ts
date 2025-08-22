@@ -1,5 +1,5 @@
-import { PrismaClient, Prisma } from "@prisma/client";
+import { PrismaClient, Prisma, AgeGroupEnum, BedStatus } from "@prisma/client";
 
 export const prismaClient = new PrismaClient();
 
-export { Prisma };
+export { Prisma, AgeGroupEnum, BedStatus };

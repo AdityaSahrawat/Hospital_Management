@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { Edit2, Trash2, Plus, Users, UserCheck, UserX } from 'lucide-react';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { SearchInput } from '../components/ui/SearchInput';
+import { Alert, AlertDescription } from '../components/ui/Alert';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
+import { Badge } from '../components/ui/Badge';
 
 // Types based on backend schema
 interface Department {
@@ -9,6 +17,7 @@ interface Department {
 
 interface Staff {
   id: number;
+  name: string;
   specialization: string;
   departmentId?: number;
   isAvailable: boolean;
@@ -16,6 +25,7 @@ interface Staff {
 }
 
 interface CreateStaffRequest {
+  name: string;
   specialization: string;
   departmentId?: number;
   isAvailable?: boolean;
@@ -23,12 +33,15 @@ interface CreateStaffRequest {
 
 const StaffManagement: React.FC = () => {
   const [staff, setStaff] = useState<Staff[]>([]);
+  const [filteredStaff, setFilteredStaff] = useState<Staff[]>([]);
+  const [searchTerm, setSearchTerm] = useState<string>('');
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingStaff, setEditingStaff] = useState<Staff | null>(null);
   const [formData, setFormData] = useState<CreateStaffRequest>({
+    name: '',
     specialization: '',
     isAvailable: true,
   });
@@ -36,15 +49,7 @@ const StaffManagement: React.FC = () => {
 
   // API base URL
   // const API_BASE_URL = 'http://localhost:3121/v1/web';
-   const API_BASE_URL = 'http://10.0.5.179:3121/v1/web';
-
-  // Create axios instance
-  const api = axios.create({
-    baseURL: API_BASE_URL,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
+  const API_BASE_URL = 'http://10.0.5.179:3121/v1/web';
 
   const loadStaff = async (): Promise<void> => {
     try {
@@ -52,10 +57,11 @@ const StaffManagement: React.FC = () => {
       setError(null);
       console.log('Loading staff from:', `${API_BASE_URL}/staff`);
       
-      const response = await api.get('/staff');
+      const response = await axios.get(`${API_BASE_URL}/staff`);
       console.log('Staff response:', response.data);
       
       setStaff(response.data);
+      setFilteredStaff(response.data);
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string } }; message?: string };
       const errorMessage = error.response?.data?.message || error.message || 'Failed to load staff data';
@@ -68,7 +74,7 @@ const StaffManagement: React.FC = () => {
 
   const loadDepartments = async (): Promise<void> => {
     try {
-      const response = await api.get('/departments');
+      const response = await axios.get(`${API_BASE_URL}/departments`);
       console.log('Departments response:', response.data);
       setDepartments(response.data);
     } catch (err: unknown) {
@@ -76,11 +82,33 @@ const StaffManagement: React.FC = () => {
     }
   };
 
+  // Search functionality
+  const handleSearchChange = (value: string): void => {
+    setSearchTerm(value);
+  };
+
   useEffect(() => {
     loadStaff();
     loadDepartments();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const handleSearch = (): void => {
+      if (!searchTerm.trim()) {
+        setFilteredStaff(staff);
+        return;
+      }
+
+      const filtered = staff.filter(staffMember =>
+        staffMember.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        staffMember.specialization.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (staffMember.department?.name && staffMember.department.name.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+      setFilteredStaff(filtered);
+    };
+
+    handleSearch();
+  }, [staff, searchTerm]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
@@ -102,7 +130,7 @@ const StaffManagement: React.FC = () => {
       console.log('Submitting form data:', formData);
       
       if (editingStaff) {
-        const response = await api.put(`/staff/${editingStaff.id}`, formData);
+        const response = await axios.put(`${API_BASE_URL}/staff/${editingStaff.id}`, formData);
         console.log('Updated staff:', response.data);
         
         // Ensure department is populated for the updated staff
@@ -116,7 +144,7 @@ const StaffManagement: React.FC = () => {
         // Update staff in state
         setStaff(staff.map(s => s.id === editingStaff.id ? updatedStaff : s));
       } else {
-        const response = await api.post('/staff', formData);
+        const response = await axios.post(`${API_BASE_URL}/staff`, formData);
         console.log('Created staff:', response.data);
         
         // Ensure department is populated for the new staff
@@ -146,7 +174,7 @@ const StaffManagement: React.FC = () => {
     if (!confirm('Are you sure you want to delete this staff member?')) return;
     
     try {
-      await api.delete(`/staff/${id}`);
+      await axios.delete(`${API_BASE_URL}/staff/${id}`);
       setStaff(staff.filter(s => s.id !== id));
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string } }; message?: string };
@@ -159,10 +187,12 @@ const StaffManagement: React.FC = () => {
   const openModal = (staffMember?: Staff): void => {
     setEditingStaff(staffMember || null);
     setFormData(staffMember ? {
+      name: staffMember.name,
       specialization: staffMember.specialization,
       departmentId: staffMember.departmentId,
       isAvailable: staffMember.isAvailable,
     } : {
+      name: '',
       specialization: '',
       isAvailable: true,
     });
@@ -174,6 +204,7 @@ const StaffManagement: React.FC = () => {
     setIsModalOpen(false);
     setEditingStaff(null);
     setFormData({
+      name: '',
       specialization: '',
       isAvailable: true,
     });
@@ -189,233 +220,217 @@ const StaffManagement: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="p-6 flex justify-center items-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-2">Loading staff...</span>
+      <div className="min-h-screen bg-gradient-to-br from-cream-50 to-pink-50 p-6 flex justify-center items-center">
+        <LoadingSpinner />
       </div>
     );
   }
 
-  // Calculate staff availability counts
-  const availableStaff = staff.filter(s => s.isAvailable).length;
-  const unavailableStaff = staff.filter(s => !s.isAvailable).length;
-  const totalStaff = staff.length;
-
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Staff Management</h1>
-        <button
-          onClick={() => openModal()}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
-        >
-          Add New Staff
-        </button>
-      </div>
-
-      {/* Staff Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-lg shadow-md border-l-4 border-blue-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Total Staff</p>
-              <p className="text-2xl font-bold text-gray-900">{totalStaff}</p>
-            </div>
-            <div className="p-3 rounded-full bg-blue-100">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </div>
+    <div className="min-h-screen bg-gradient-to-br from-cream-50 to-pink-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-8">
+          <div className="flex items-center space-x-3">
+            <Users className="h-8 w-8 text-teal-600" />
+            <h1 className="text-3xl font-bold text-gray-900">Staff Management</h1>
           </div>
+          <Button onClick={() => openModal()} className="flex items-center space-x-2">
+            <Plus className="h-5 w-5" />
+            <span>Add New Staff</span>
+          </Button>
         </div>
 
-        <div className="bg-white p-4 rounded-lg shadow-md border-l-4 border-green-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Available Staff</p>
-              <p className="text-2xl font-bold text-green-600">{availableStaff}</p>
-              <p className="text-xs text-gray-500">
-                {totalStaff > 0 ? `${Math.round((availableStaff / totalStaff) * 100)}%` : '0%'} of total
-              </p>
-            </div>
-            <div className="p-3 rounded-full bg-green-100">
-              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
+        {/* Search Bar */}
+        <div className="mb-6">
+          <SearchInput
+            placeholder="Search staff by name, specialization, or department..."
+            value={searchTerm}
+            onSearch={handleSearchChange}
+          />
         </div>
 
-        <div className="bg-white p-4 rounded-lg shadow-md border-l-4 border-red-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Unavailable Staff</p>
-              <p className="text-2xl font-bold text-red-600">{unavailableStaff}</p>
-              <p className="text-xs text-gray-500">
-                {totalStaff > 0 ? `${Math.round((unavailableStaff / totalStaff) * 100)}%` : '0%'} of total
-              </p>
-            </div>
-            <div className="p-3 rounded-full bg-red-100">
-              <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
-        </div>
-      </div>
+        {/* Error Alert */}
+        {error && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-      {error && (
-        <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-          {error}
-        </div>
-      )}
-
-      {/* Staff List */}
-      <div className="bg-white shadow-md rounded-lg overflow-hidden">
-        <table className="w-full table-auto">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                ID
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Specialization
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Department
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {staff.map((member) => (
-              <tr key={member.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {member.id}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {member.specialization}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {member.department?.name || 'N/A'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    member.isAvailable 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-red-100 text-red-800'
-                  }`}>
-                    {member.isAvailable ? 'Available' : 'Unavailable'}
+        {/* Staff Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredStaff.map((member) => (
+            <Card key={member.id} className="hover:shadow-lg transition-shadow duration-300">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center justify-between">
+                  <span className="flex items-center space-x-2">
+                    <Users className="h-5 w-5 text-teal-600" />
+                    <span className="truncate">{member.name}</span>
                   </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                  <button
-                    onClick={() => openModal(member)}
-                    className="text-blue-600 hover:text-blue-900"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(member.id)}
-                    className="text-red-600 hover:text-red-900"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <Badge variant={member.isAvailable ? "default" : "secondary"}>
+                    {member.isAvailable ? (
+                      <UserCheck className="h-3 w-3 mr-1" />
+                    ) : (
+                      <UserX className="h-3 w-3 mr-1" />
+                    )}
+                    {member.isAvailable ? 'Available' : 'Unavailable'}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm text-gray-500">ID</p>
+                    <p className="font-medium">#{member.id}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Specialization</p>
+                    <p className="font-medium capitalize">{member.specialization}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Department</p>
+                    <p className="font-medium">{member.department?.name || 'No Department'}</p>
+                  </div>
+                  
+                  <div className="flex space-x-2 pt-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openModal(member)}
+                      className="flex-1 flex items-center justify-center space-x-1"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                      <span>Edit</span>
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleDelete(member.id)}
+                      className="flex-1 flex items-center justify-center space-x-1"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span>Delete</span>
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
 
-        {staff.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            No staff members found. Add one to get started.
+        {filteredStaff.length === 0 && (
+          <Card className="text-center py-12">
+            <CardContent>
+              <Users className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">No staff members found</h3>
+              <p className="text-gray-500 mb-6">
+                {searchTerm ? 'Try adjusting your search terms' : 'Add your first staff member to get started'}
+              </p>
+              {!searchTerm && (
+                <Button onClick={() => openModal()}>
+                  <Plus className="h-5 w-5 mr-2" />
+                  Add New Staff
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Modal */}
+        {isModalOpen && (
+          <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <Card className="w-full max-w-md">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Users className="h-5 w-5 text-teal-600" />
+                  <span>{editingStaff ? 'Edit Staff Member' : 'Add New Staff Member'}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Name
+                    </label>
+                    <Input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => handleInputChange('name', e.target.value)}
+                      placeholder="Staff member name"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Specialization
+                    </label>
+                    <Input
+                      type="text"
+                      value={formData.specialization}
+                      onChange={(e) => handleInputChange('specialization', e.target.value)}
+                      placeholder="e.g., doctor, nurse, surgeon"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Department
+                    </label>
+                    <select
+                      value={formData.departmentId || ''}
+                      onChange={(e) => handleInputChange('departmentId', e.target.value ? parseInt(e.target.value) : undefined)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                      disabled={formData.specialization === 'nurse'}
+                    >
+                      <option value="">Select Department</option>
+                      {departments.map((dept) => (
+                        <option key={dept.id} value={dept.id}>
+                          {dept.name}
+                        </option>
+                      ))}
+                    </select>
+                    {formData.specialization === 'nurse' && (
+                      <p className="text-sm text-gray-500 mt-1">Nurses cannot be assigned to departments</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={formData.isAvailable || false}
+                        onChange={(e) => handleInputChange('isAvailable', e.target.checked)}
+                        className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                      />
+                      <span className="text-sm text-gray-700">Available</span>
+                    </label>
+                  </div>
+
+                  <div className="flex justify-end space-x-3 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={closeModal}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={submitting}
+                      className="flex items-center space-x-2"
+                    >
+                      {submitting ? <LoadingSpinner /> : null}
+                      <span>{submitting ? 'Saving...' : (editingStaff ? 'Update' : 'Create')}</span>
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
           </div>
         )}
       </div>
-
-      {/* Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-lg font-semibold mb-4">
-              {editingStaff ? 'Edit Staff Member' : 'Add New Staff Member'}
-            </h2>
-
-            <form onSubmit={handleSubmit}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Specialization
-                </label>
-                <input
-                  type="text"
-                  value={formData.specialization}
-                  onChange={(e) => handleInputChange('specialization', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., doctor, nurse, surgeon"
-                  required
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Department
-                </label>
-                <select
-                  value={formData.departmentId || ''}
-                  onChange={(e) => handleInputChange('departmentId', e.target.value ? parseInt(e.target.value) : undefined)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={formData.specialization === 'nurse'}
-                >
-                  <option value="">Select Department</option>
-                  {departments.map((dept) => (
-                    <option key={dept.id} value={dept.id}>
-                      {dept.name}
-                    </option>
-                  ))}
-                </select>
-                {formData.specialization === 'nurse' && (
-                  <p className="text-sm text-gray-500 mt-1">Nurses cannot be assigned to departments</p>
-                )}
-              </div>
-
-              <div className="mb-6">
-                <label className="flex items-center">
-                  <input
-                    type="checkbox"
-                    checked={formData.isAvailable || false}
-                    onChange={(e) => handleInputChange('isAvailable', e.target.checked)}
-                    className="mr-2"
-                  />
-                  <span className="text-sm text-gray-700">Available</span>
-                </label>
-              </div>
-
-              <div className="flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {submitting ? 'Saving...' : (editingStaff ? 'Update' : 'Create')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

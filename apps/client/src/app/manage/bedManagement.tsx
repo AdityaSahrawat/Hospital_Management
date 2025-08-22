@@ -1,5 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { Edit2, Trash2, Plus, Bed, Zap, Wrench, CheckCircle } from 'lucide-react';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { SearchInput } from '../components/ui/SearchInput';
+import { Alert, AlertDescription } from '../components/ui/Alert';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
+import { Badge } from '../components/ui/Badge';
+
+// Bed Status Enum values matching the backend
+const BED_STATUS_OPTIONS = [
+  { value: 'FREE', label: 'Free' },
+  { value: 'OCCUPIED', label: 'Occupied' },
+  { value: 'MAINTENANCE', label: 'Maintenance' }
+];
 
 // Types based on backend schema
 interface Department {
@@ -23,6 +38,8 @@ interface CreateBedRequest {
 
 const BedManagement: React.FC = () => {
   const [beds, setBeds] = useState<Bed[]>([]);
+  const [filteredBeds, setFilteredBeds] = useState<Bed[]>([]);
+  const [searchTerm, setSearchTerm] = useState<string>('');
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,22 +47,14 @@ const BedManagement: React.FC = () => {
   const [editingBed, setEditingBed] = useState<Bed | null>(null);
   const [formData, setFormData] = useState<CreateBedRequest>({
     type: '',
-    status: 'free',
+    status: 'FREE',
     departmentId: 0,
   });
   const [submitting, setSubmitting] = useState<boolean>(false);
 
   // API base URL
   // const API_BASE_URL = 'http://localhost:3121/v1/web';
-   const API_BASE_URL = 'http://10.0.5.179:3121/v1/web';
-
-  // Create axios instance
-  const api = axios.create({
-    baseURL: API_BASE_URL,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
+  const API_BASE_URL = 'http://10.0.5.179:3121/v1/web';
 
   const loadBeds = async (): Promise<void> => {
     try {
@@ -53,10 +62,11 @@ const BedManagement: React.FC = () => {
       setError(null);
       console.log('Loading beds from:', `${API_BASE_URL}/beds`);
       
-      const response = await api.get('/beds');
+      const response = await axios.get(`${API_BASE_URL}/beds`);
       console.log('Beds response:', response.data);
       
       setBeds(response.data);
+      setFilteredBeds(response.data);
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string } }; message?: string };
       const errorMessage = error.response?.data?.message || error.message || 'Failed to load bed data';
@@ -69,7 +79,7 @@ const BedManagement: React.FC = () => {
 
   const loadDepartments = async (): Promise<void> => {
     try {
-      const response = await api.get('/departments');
+      const response = await axios.get(`${API_BASE_URL}/departments`);
       console.log('Departments response:', response.data);
       setDepartments(response.data);
     } catch (err: unknown) {
@@ -77,11 +87,33 @@ const BedManagement: React.FC = () => {
     }
   };
 
+  // Search functionality
+  const handleSearchChange = (value: string): void => {
+    setSearchTerm(value);
+  };
+
   useEffect(() => {
     loadBeds();
     loadDepartments();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const handleSearch = (): void => {
+      if (!searchTerm.trim()) {
+        setFilteredBeds(beds);
+        return;
+      }
+
+      const filtered = beds.filter(bed =>
+        bed.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        bed.status.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (bed.department?.name && bed.department.name.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+      setFilteredBeds(filtered);
+    };
+
+    handleSearch();
+  }, [beds, searchTerm]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
@@ -98,7 +130,7 @@ const BedManagement: React.FC = () => {
       console.log('Submitting form data:', formData);
       
       if (editingBed) {
-        const response = await api.put(`/beds/${editingBed.id}`, formData);
+        const response = await axios.put(`${API_BASE_URL}/beds/${editingBed.id}`, formData);
         console.log('Updated bed:', response.data);
         
         // Ensure department is populated for the updated bed
@@ -112,7 +144,7 @@ const BedManagement: React.FC = () => {
         // Update bed in state
         setBeds(beds.map(b => b.id === editingBed.id ? updatedBed : b));
       } else {
-        const response = await api.post('/beds', formData);
+        const response = await axios.post(`${API_BASE_URL}/beds`, formData);
         console.log('Created bed:', response.data);
         
         // Ensure department is populated for the new bed
@@ -142,7 +174,7 @@ const BedManagement: React.FC = () => {
     if (!confirm('Are you sure you want to delete this bed?')) return;
     
     try {
-      await api.delete(`/beds/${id}`);
+      await axios.delete(`${API_BASE_URL}/beds/${id}`);
       setBeds(beds.filter(b => b.id !== id));
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string } }; message?: string };
@@ -160,7 +192,7 @@ const BedManagement: React.FC = () => {
       departmentId: bed.departmentId,
     } : {
       type: '',
-      status: 'free',
+      status: 'FREE',
       departmentId: 0,
     });
     setIsModalOpen(true);
@@ -172,7 +204,7 @@ const BedManagement: React.FC = () => {
     setEditingBed(null);
     setFormData({
       type: '',
-      status: 'free',
+      status: 'FREE',
       departmentId: 0,
     });
     setError(null);
@@ -185,181 +217,219 @@ const BedManagement: React.FC = () => {
     }));
   };
 
+  // Helper function to get status badge color and icon
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'FREE':
+        return { variant: 'default' as const, icon: CheckCircle, color: 'text-green-600' };
+      case 'OCCUPIED':
+        return { variant: 'destructive' as const, icon: Zap, color: 'text-red-600' };
+      case 'MAINTENANCE':
+        return { variant: 'secondary' as const, icon: Wrench, color: 'text-yellow-600' };
+      default:
+        return { variant: 'secondary' as const, icon: CheckCircle, color: 'text-gray-600' };
+    }
+  };
+
   if (loading) {
     return (
-      <div className="p-6 flex justify-center items-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-2">Loading beds...</span>
+      <div className="min-h-screen bg-gradient-to-br from-cream-50 to-pink-50 p-6 flex justify-center items-center">
+        <LoadingSpinner />
       </div>
     );
   }
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Bed Management</h1>
-        <button
-          onClick={() => openModal()}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
-        >
-          Add New Bed
-        </button>
-      </div>
-
-      {error && (
-        <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-          {error}
+    <div className="min-h-screen bg-gradient-to-br from-cream-50 to-pink-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-8">
+          <div className="flex items-center space-x-3">
+            <Bed className="h-8 w-8 text-teal-600" />
+            <h1 className="text-3xl font-bold text-gray-900">Bed Management</h1>
+          </div>
+          <Button onClick={() => openModal()} className="flex items-center space-x-2">
+            <Plus className="h-5 w-5" />
+            <span>Add New Bed</span>
+          </Button>
         </div>
-      )}
 
-      {/* Beds List */}
-      <div className="bg-white shadow-md rounded-lg overflow-hidden">
-        <table className="w-full table-auto">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                ID
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Type
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Status
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Department
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {beds.map((bed) => (
-              <tr key={bed.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {bed.id}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {bed.type}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    bed.status === 'free'
-                      ? 'bg-green-100 text-green-800' 
-                      : bed.status === 'occupied'
-                      ? 'bg-red-100 text-red-800'
-                      : 'bg-yellow-100 text-yellow-800'
-                  }`}>
-                    {bed.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {bed.department?.name || 'N/A'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                  <button
-                    onClick={() => openModal(bed)}
-                    className="text-blue-600 hover:text-blue-900"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(bed.id)}
-                    className="text-red-600 hover:text-red-900"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {/* Search Bar */}
+        <div className="mb-6">
+          <SearchInput
+            placeholder="Search beds by type, status, or department..."
+            value={searchTerm}
+            onSearch={handleSearchChange}
+          />
+        </div>
 
-        {beds.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            No beds found. Add one to get started.
+        {/* Error Alert */}
+        {error && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Bed Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {filteredBeds.map((bed) => {
+            const statusInfo = getStatusBadge(bed.status);
+            const StatusIcon = statusInfo.icon;
+            
+            return (
+              <Card key={bed.id} className="hover:shadow-lg transition-shadow duration-300">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center justify-between">
+                    <span className="flex items-center space-x-2">
+                      <Bed className="h-5 w-5 text-teal-600" />
+                      <span>{bed.type}</span>
+                    </span>
+                    <Badge variant={statusInfo.variant}>
+                      <StatusIcon className="h-3 w-3 mr-1" />
+                      {bed.status}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm text-gray-500">Bed ID</p>
+                      <p className="font-medium">#{bed.id}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-500">Department</p>
+                      <p className="font-medium">{bed.department?.name || 'Unassigned'}</p>
+                    </div>
+                    
+                    <div className="flex space-x-2 pt-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openModal(bed)}
+                        className="flex-1 flex items-center justify-center space-x-1"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                        <span>Edit</span>
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDelete(bed.id)}
+                        className="flex-1 flex items-center justify-center space-x-1"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span>Delete</span>
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        {filteredBeds.length === 0 && (
+          <Card className="text-center py-12">
+            <CardContent>
+              <Bed className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">No beds found</h3>
+              <p className="text-gray-500 mb-6">
+                {searchTerm ? 'Try adjusting your search terms' : 'Add your first bed to get started'}
+              </p>
+              {!searchTerm && (
+                <Button onClick={() => openModal()}>
+                  <Plus className="h-5 w-5 mr-2" />
+                  Add New Bed
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Modal */}
+        {isModalOpen && (
+          <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <Card className="w-full max-w-md">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Bed className="h-5 w-5 text-teal-600" />
+                  <span>{editingBed ? 'Edit Bed' : 'Add New Bed'}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Bed Type
+                    </label>
+                    <Input
+                      type="text"
+                      value={formData.type}
+                      onChange={(e) => handleInputChange('type', e.target.value)}
+                      placeholder="e.g., Standard, ICU, VIP"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Status
+                    </label>
+                    <select
+                      value={formData.status || 'FREE'}
+                      onChange={(e) => handleInputChange('status', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                    >
+                      {BED_STATUS_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Department
+                    </label>
+                    <select
+                      value={formData.departmentId || ''}
+                      onChange={(e) => handleInputChange('departmentId', e.target.value ? parseInt(e.target.value) : undefined)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="">Select Department</option>
+                      {departments.map((dept) => (
+                        <option key={dept.id} value={dept.id}>
+                          {dept.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex justify-end space-x-3 pt-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={closeModal}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      disabled={submitting}
+                      className="flex items-center space-x-2"
+                    >
+                      {submitting ? <LoadingSpinner /> : null}
+                      <span>{submitting ? 'Saving...' : (editingBed ? 'Update' : 'Create')}</span>
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
           </div>
         )}
       </div>
-
-      {/* Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <h2 className="text-lg font-semibold mb-4">
-              {editingBed ? 'Edit Bed' : 'Add New Bed'}
-            </h2>
-
-            <form onSubmit={handleSubmit}>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Bed Type
-                </label>
-                <input
-                  type="text"
-                  value={formData.type}
-                  onChange={(e) => handleInputChange('type', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="e.g., Standard, ICU, VIP"
-                  required
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Status
-                </label>
-                <select
-                  value={formData.status || 'free'}
-                  onChange={(e) => handleInputChange('status', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="free">Free</option>
-                  <option value="occupied">Occupied</option>
-                  <option value="maintenance">Maintenance</option>
-                </select>
-              </div>
-
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Department
-                </label>
-                <select
-                  value={formData.departmentId || ''}
-                  onChange={(e) => handleInputChange('departmentId', e.target.value ? parseInt(e.target.value) : undefined)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  <option value="">Select Department</option>
-                  {departments.map((dept) => (
-                    <option key={dept.id} value={dept.id}>
-                      {dept.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {submitting ? 'Saving...' : (editingBed ? 'Update' : 'Create')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
