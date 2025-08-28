@@ -1,0 +1,18 @@
+docker images surgesense:latest
+
+# 1) Login Docker to Fly’s registry
+fly auth docker
+
+# 2) Tag local image for your Fly app (app name from fly.toml)
+docker tag surgesense:latest registry.fly.io/surgesense:latest
+
+# 3) Push it
+docker push registry.fly.io/surgesense:latest
+
+# 4) Deploy using the pushed image (run inside apps/client so fly.toml is used)
+cd apps/client
+fly deploy --image registry.fly.io/surgesense:latest
+
+# 5) Check status/logs
+fly status
+fly logs

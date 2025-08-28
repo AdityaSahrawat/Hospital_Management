@@ -109,3 +109,76 @@ export interface HospitalInfo {
   availableBeds?: number;
   departments?: string[];
 }
+
+// Dashboard/Statistics Types
+export interface HospitalStats {
+  beds: {
+    total: number;
+    occupied: number;
+    available: number;
+    maintenance: number;
+  };
+  staff: {
+    total: number;
+    available: number;
+    onDuty: number;
+  };
+  inventory: {
+    totalItems: number;
+    lowStock: number;
+    expiringSoon: number;
+    expired: number;
+  };
+}
+
+// Alternative Bed Type (used in dashboard)
+export interface DashboardBed {
+  id: number;
+  type: string;
+  status: 'FREE' | 'OCCUPIED' | 'MAINTENANCE';
+  departmentId?: number;
+  department?: {
+    id: number;
+    name: string;
+  };
+}
+
+// Alternative Staff Type (used in dashboard)
+export interface DashboardStaff {
+  id: number;
+  name: string;
+  specialization: string;
+  isAvailable: boolean;
+  departmentId?: number;
+  department?: {
+    id: number;
+    name: string;
+  };
+}
+
+// Medicine Types
+export interface Medicine {
+  id: number;
+  name: string;
+  form: string;
+  strength: string;
+  unit: string;
+}
+
+// Inventory Types
+export interface Inventory {
+  id: number;
+  availableQty: number;
+  batchNumber?: string;
+  expiryDate?: string;
+  medicine: Medicine;
+}
+
+// Prediction Types
+export interface PredictionData {
+  predictions?: string[];
+  message?: string;
+}
+
+
+

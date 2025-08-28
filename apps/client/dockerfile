@@ -1,0 +1,60 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Recommended for Next.js native modules (e.g., sharp) on Alpine
+RUN apk add --no-cache libc6-compat
+
+# Enable pnpm (via Corepack)
+ENV PNPM_HOME=/root/.local/share/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+
+# Use hoisted node_modules to avoid pnpm symlink issues in standalone output
+ENV PNPM_NODE_LINKER=hoisted
+RUN pnpm config set node-linker hoisted
+
+# Public API base URL for client, passed at build
+ARG NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+
+# Copy root manifests first for better layer caching
+COPY pnpm-lock.yaml package.json pnpm-workspace.yaml turbo.json ./
+
+# Copy the full monorepo (build context should be repository root)
+COPY . .
+
+# Install workspace deps (allow lockfile update inside container)
+RUN pnpm install --no-frozen-lockfile
+
+# Build only the Next.js client app (Turbo will build its deps)
+RUN pnpm turbo run build --filter=./apps/client
+
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+RUN apk add --no-cache libc6-compat
+
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Keep the public API base URL available at runtime as well
+ARG NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+
+# Copy the Next standalone output at filesystem root so pnpm symlinks resolve
+COPY --from=builder /app/apps/client/.next/standalone /
+
+# Provide a root-level node_modules for pnpm symlink targets
+COPY --from=builder /app/node_modules /node_modules
+
+# Copy runtime static/public assets into the expected locations at root
+COPY --from=builder /app/apps/client/public /public
+COPY --from=builder /app/apps/client/.next/static /.next/static
+
+EXPOSE 3000
+
+# Start the Next.js standalone server
+WORKDIR /
+CMD ["node", "server.js"]

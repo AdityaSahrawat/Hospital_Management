@@ -53,8 +53,7 @@ const InventoryManagement: React.FC = () => {
   const [submitting, setSubmitting] = useState<boolean>(false);
 
   // API base URL
-  const API_BASE_URL = 'http://localhost:3121/v1/web';
-//   const API_BASE_URL = 'http://10.0.5.179:3121/v1/web';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
 
   const loadInventory = async (): Promise<void> => {
     try {

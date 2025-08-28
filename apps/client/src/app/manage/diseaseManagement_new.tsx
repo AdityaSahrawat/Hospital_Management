@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { Edit2, Trash2, Plus, Heart, User, Pill, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '../components/ui/Button';
@@ -59,12 +59,35 @@ const DiseaseManagement: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingDisease, setEditingDisease] = useState<Disease | null>(null);
+  const [saving, setSaving] = useState<boolean>(false);
+
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '',
+    subcategories: [
+      {
+        name: '',
+        ageGroups: [
+          {
+            group: '',
+            ageRange: '',
+            medicines: [
+              {
+                name: '',
+                dosage: '',
+                notes: ''
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  });
 
   // API base URL
-  // const API_BASE_URL = 'http://localhost:3121/v1/web';
-  const API_BASE_URL = 'http://10.0.5.179:3121/v1/web';
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
-  const loadDiseases = async (): Promise<void> => {
+  const loadDiseases = useCallback(async (): Promise<void> => {
     try {
       setLoading(true);
       setError(null);
@@ -83,11 +106,11 @@ const DiseaseManagement: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API_BASE_URL]);
 
   useEffect(() => {
     loadDiseases();
-  }, []);
+  }, [loadDiseases]);
 
   // Filter diseases based on search term
   useEffect(() => {
@@ -125,7 +148,55 @@ const DiseaseManagement: React.FC = () => {
   };
 
   const openModal = (disease?: Disease): void => {
-    setEditingDisease(disease || null);
+    if (disease) {
+      // Populate form for editing
+      setFormData({
+        name: disease.name,
+        subcategories: disease.subcategories.map(sub => ({
+          name: sub.name,
+          ageGroups: sub.ageGroups.map(age => ({
+            group: age.group,
+            ageRange: age.ageRange,
+            medicines: age.medicines && age.medicines.length > 0 
+              ? age.medicines.map(med => ({
+                  name: med.name,
+                  dosage: med.dosage,
+                  notes: med.notes
+                }))
+              : [{
+                  name: '',
+                  dosage: '',
+                  notes: ''
+                }]
+          }))
+        }))
+      });
+      setEditingDisease(disease);
+    } else {
+      // Reset form for new disease
+      setFormData({
+        name: '',
+        subcategories: [
+          {
+            name: '',
+            ageGroups: [
+              {
+                group: '',
+                ageRange: '',
+                medicines: [
+                  {
+                    name: '',
+                    dosage: '',
+                    notes: ''
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      });
+      setEditingDisease(null);
+    }
     setIsModalOpen(true);
     setError(null);
   };
@@ -134,6 +205,234 @@ const DiseaseManagement: React.FC = () => {
     setIsModalOpen(false);
     setEditingDisease(null);
     setError(null);
+    setFormData({
+      name: '',
+      subcategories: [
+        {
+          name: '',
+          ageGroups: [
+            {
+              group: '',
+              ageRange: '',
+              medicines: [
+                {
+                  name: '',
+                  dosage: '',
+                  notes: ''
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    });
+  };
+
+  const handleSave = async (): Promise<void> => {
+    try {
+      setSaving(true);
+      setError(null);
+
+      // Validate form
+      if (!formData.name.trim()) {
+        setError('Disease name is required');
+        return;
+      }
+
+      if (formData.subcategories.some(sub => !sub.name.trim())) {
+        setError('All subcategory names are required');
+        return;
+      }
+
+      if (formData.subcategories.some(sub => 
+        sub.ageGroups.some(age => !age.group.trim() || !age.ageRange.trim())
+      )) {
+        setError('All age group fields are required');
+        return;
+      }
+
+      const payload = {
+        name: formData.name,
+        subcategories: formData.subcategories.map(sub => ({
+          name: sub.name,
+          ageGroups: sub.ageGroups.map(age => ({
+            group: age.group,
+            ageRange: age.ageRange,
+            medicines: age.medicines.filter(med => med.name.trim()) // Only include medicines with names
+          }))
+        }))
+      };
+
+      if (editingDisease) {
+        // Update existing disease
+        await axios.put(`${API_BASE_URL}/diseases/${editingDisease.id}`, payload);
+      } else {
+        // Create new disease
+        await axios.post(`${API_BASE_URL}/diseases`, payload);
+      }
+
+      await loadDiseases();
+      closeModal();
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { message?: string } }; message?: string };
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to save disease';
+      setError(errorMessage);
+      console.error('Error saving disease:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addSubcategory = (): void => {
+    setFormData(prev => ({
+      ...prev,
+      subcategories: [
+        ...prev.subcategories,
+        {
+          name: '',
+          ageGroups: [
+            {
+              group: '',
+              ageRange: '',
+              medicines: [
+                {
+                  name: '',
+                  dosage: '',
+                  notes: ''
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }));
+  };
+
+  const removeSubcategory = (index: number): void => {
+    if (formData.subcategories.length > 1) {
+      setFormData(prev => ({
+        ...prev,
+        subcategories: prev.subcategories.filter((_, i) => i !== index)
+      }));
+    }
+  };
+
+  const addAgeGroup = (subcategoryIndex: number): void => {
+    setFormData(prev => ({
+      ...prev,
+      subcategories: prev.subcategories.map((sub, i) =>
+        i === subcategoryIndex
+          ? {
+              ...sub,
+              ageGroups: [
+                ...sub.ageGroups,
+                {
+                  group: '',
+                  ageRange: '',
+                  medicines: [
+                    {
+                      name: '',
+                      dosage: '',
+                      notes: ''
+                    }
+                  ]
+                }
+              ]
+            }
+          : sub
+      )
+    }));
+  };
+
+  const removeAgeGroup = (subcategoryIndex: number, ageGroupIndex: number): void => {
+    if (formData.subcategories[subcategoryIndex].ageGroups.length > 1) {
+      setFormData(prev => ({
+        ...prev,
+        subcategories: prev.subcategories.map((sub, i) =>
+          i === subcategoryIndex
+            ? {
+                ...sub,
+                ageGroups: sub.ageGroups.filter((_, j) => j !== ageGroupIndex)
+              }
+            : sub
+        )
+      }));
+    }
+  };
+
+  const addMedicine = (subcategoryIndex: number, ageGroupIndex: number): void => {
+    setFormData(prev => ({
+      ...prev,
+      subcategories: prev.subcategories.map((sub, i) =>
+        i === subcategoryIndex
+          ? {
+              ...sub,
+              ageGroups: sub.ageGroups.map((age, j) =>
+                j === ageGroupIndex
+                  ? {
+                      ...age,
+                      medicines: [
+                        ...age.medicines,
+                        {
+                          name: '',
+                          dosage: '',
+                          notes: ''
+                        }
+                      ]
+                    }
+                  : age
+              )
+            }
+          : sub
+      )
+    }));
+  };
+
+  const removeMedicine = (subcategoryIndex: number, ageGroupIndex: number, medicineIndex: number): void => {
+    if (formData.subcategories[subcategoryIndex].ageGroups[ageGroupIndex].medicines.length > 1) {
+      setFormData(prev => ({
+        ...prev,
+        subcategories: prev.subcategories.map((sub, i) =>
+          i === subcategoryIndex
+            ? {
+                ...sub,
+                ageGroups: sub.ageGroups.map((age, j) =>
+                  j === ageGroupIndex
+                    ? {
+                        ...age,
+                        medicines: age.medicines.filter((_, k) => k !== medicineIndex)
+                      }
+                    : age
+                )
+              }
+            : sub
+        )
+      }));
+    }
+  };
+
+  const updateFormField = (path: string, value: string): void => {
+    setFormData(prev => {
+      const newData = { ...prev };
+      const keys = path.split('.');
+      let current: Record<string, unknown> = newData;
+      
+      for (let i = 0; i < keys.length - 1; i++) {
+        const key = keys[i];
+        if (key.includes('[') && key.includes(']')) {
+          const arrayKey = key.split('[')[0];
+          const index = parseInt(key.split('[')[1].split(']')[0]);
+          current = (current[arrayKey] as Record<string, unknown>[])[index];
+        } else {
+          current = current[key] as Record<string, unknown>;
+        }
+      }
+      
+      const lastKey = keys[keys.length - 1];
+      current[lastKey] = value;
+      
+      return newData;
+    });
   };
 
   // Helper functions
@@ -326,7 +625,7 @@ const DiseaseManagement: React.FC = () => {
         {/* Modal */}
         {isModalOpen && (
           <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-            <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <Card className="w-full max-w-6xl max-h-[90vh] overflow-y-auto">
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
@@ -339,17 +638,218 @@ const DiseaseManagement: React.FC = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-sm text-gray-600 mb-4">
-                  Note: This is a complex form. Please fill out all required fields.
-                </div>
-                <div className="flex justify-end space-x-3 pt-4">
-                  <Button type="button" variant="outline" onClick={closeModal}>
-                    Cancel
-                  </Button>
-                  <Button type="button" onClick={closeModal} className="bg-teal-600 hover:bg-teal-700">
-                    Save (Simplified)
-                  </Button>
-                </div>
+                {error && (
+                  <Alert className="mb-4">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+
+                <form className="space-y-6" onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
+                  {/* Disease Name */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Disease Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                      placeholder="Enter disease name"
+                      required
+                    />
+                  </div>
+
+                  {/* Subcategories */}
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-medium text-gray-900">Subcategories</h3>
+                      <Button type="button" onClick={addSubcategory} size="sm" className="bg-teal-600 hover:bg-teal-700">
+                        <Plus className="h-4 w-4 mr-1" />
+                        Add Subcategory
+                      </Button>
+                    </div>
+
+                    {formData.subcategories.map((subcategory, subIndex) => (
+                      <Card key={subIndex} className="mb-4 bg-gray-50">
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-medium text-gray-800">Subcategory {subIndex + 1}</h4>
+                            {formData.subcategories.length > 1 && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeSubcategory(subIndex)}
+                                className="text-red-600 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                          <input
+                            type="text"
+                            value={subcategory.name}
+                            onChange={(e) => updateFormField(`subcategories[${subIndex}].name`, e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                            placeholder="Subcategory name"
+                            required
+                          />
+                        </CardHeader>
+                        <CardContent>
+                          {/* Age Groups */}
+                          <div className="mb-4">
+                            <div className="flex items-center justify-between mb-2">
+                              <h5 className="text-sm font-medium text-gray-700">Age Groups</h5>
+                              <Button
+                                type="button"
+                                onClick={() => addAgeGroup(subIndex)}
+                                size="sm"
+                                variant="outline"
+                                className="text-teal-600 border-teal-600 hover:bg-teal-50"
+                              >
+                                <Plus className="h-3 w-3 mr-1" />
+                                Add Age Group
+                              </Button>
+                            </div>
+  
+                            {subcategory.ageGroups.map((ageGroup, ageIndex) => (
+                              <Card key={ageIndex} className="mb-3 bg-white">
+                                <CardContent className="pt-4">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <h6 className="text-sm font-medium text-gray-600">Age Group {ageIndex + 1}</h6>
+                                    {subcategory.ageGroups.length > 1 && (
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => removeAgeGroup(subIndex, ageIndex)}
+                                        className="text-red-500 hover:bg-red-50"
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
+                                    )}
+                                  </div>
+
+                                  <div className="grid grid-cols-2 gap-3 mb-4">
+                                    <div>
+                                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                                        Group Name <span className="text-red-500">*</span>
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={ageGroup.group}
+                                        onChange={(e) => updateFormField(`subcategories[${subIndex}].ageGroups[${ageIndex}].group`, e.target.value)}
+                                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-transparent"
+                                        placeholder="e.g., Adults, Children"
+                                        required
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                                        Age Range <span className="text-red-500">*</span>
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={ageGroup.ageRange}
+                                        onChange={(e) => updateFormField(`subcategories[${subIndex}].ageGroups[${ageIndex}].ageRange`, e.target.value)}
+                                        className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-transparent"
+                                        placeholder="e.g., 18-65 years"
+                                        required
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Medicines */}
+                                  <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <label className="text-xs font-medium text-gray-600">Medicines</label>
+                                      <Button
+                                        type="button"
+                                        onClick={() => addMedicine(subIndex, ageIndex)}
+                                        size="sm"
+                                        variant="outline"
+                                        className="text-xs px-2 py-1 h-6"
+                                      >
+                                        <Plus className="h-3 w-3 mr-1" />
+                                        Add Medicine
+                                      </Button>
+                                    </div>
+
+                                    {ageGroup.medicines.map((medicine, medIndex) => (
+                                      <div key={medIndex} className="grid grid-cols-12 gap-2 mb-2 items-start">
+                                        <div className="col-span-4">
+                                          <input
+                                            type="text"
+                                            value={medicine.name}
+                                            onChange={(e) => updateFormField(`subcategories[${subIndex}].ageGroups[${ageIndex}].medicines[${medIndex}].name`, e.target.value)}
+                                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-teal-500"
+                                            placeholder="Medicine name"
+                                          />
+                                        </div>
+                                        <div className="col-span-3">
+                                          <input
+                                            type="text"
+                                            value={medicine.dosage}
+                                            onChange={(e) => updateFormField(`subcategories[${subIndex}].ageGroups[${ageIndex}].medicines[${medIndex}].dosage`, e.target.value)}
+                                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-teal-500"
+                                            placeholder="Dosage"
+                                          />
+                                        </div>
+                                        <div className="col-span-4">
+                                          <input
+                                            type="text"
+                                            value={medicine.notes}
+                                            onChange={(e) => updateFormField(`subcategories[${subIndex}].ageGroups[${ageIndex}].medicines[${medIndex}].notes`, e.target.value)}
+                                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-teal-500"
+                                            placeholder="Notes"
+                                          />
+                                        </div>
+                                        <div className="col-span-1 flex justify-center">
+                                          {ageGroup.medicines.length > 1 && (
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => removeMedicine(subIndex, ageIndex, medIndex)}
+                                              className="p-1 h-6 w-6 text-red-500 hover:bg-red-50"
+                                            >
+                                              <Trash2 className="h-3 w-3" />
+                                            </Button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+
+                  <div className="flex justify-end space-x-3 pt-4 border-t">
+                    <Button type="button" variant="outline" onClick={closeModal}>
+                      Cancel
+                    </Button>
+                    <Button 
+                      type="submit" 
+                      className="bg-teal-600 hover:bg-teal-700"
+                      disabled={saving}
+                    >
+                      {saving ? (
+                        <>
+                          <LoadingSpinner />
+                          Saving...
+                        </>
+                      ) : (
+                        <>Save Disease</>
+                      )}
+                    </Button>
+                  </div>
+                </form>
               </CardContent>
             </Card>
           </div>

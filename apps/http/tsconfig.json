@@ -3,11 +3,20 @@
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src",
-    "noEmit": true,
+    "composite": true,
+    "baseUrl": ".",
+    "paths": {
+      "@repo/db": ["../../packages/db/src"],
+      "@repo/valid": ["../../packages/types/src"]
+    },
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
     "typeRoots": ["./src/types", "./node_modules/@types"]
   },
-  "include": ["src" , "src/types"]
+  "include": ["src", "src/types"],
+  "references": [
+    { "path": "../../packages/db" },
+    { "path": "../../packages/types" }
+  ]
 }

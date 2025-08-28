@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Edit2, Trash2, Plus, Bed, Zap, Wrench, CheckCircle } from 'lucide-react';
 import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
 import { SearchInput } from '../components/ui/SearchInput';
 import { Alert, AlertDescription } from '../components/ui/Alert';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
@@ -15,6 +14,9 @@ const BED_STATUS_OPTIONS = [
   { value: 'OCCUPIED', label: 'Occupied' },
   { value: 'MAINTENANCE', label: 'Maintenance' }
 ];
+
+// Bed Type options for creation/edit
+const BED_TYPE_OPTIONS = ['ward', 'icu', 'vip'] as const;
 
 // Types based on backend schema
 interface Department {
@@ -46,18 +48,22 @@ const BedManagement: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingBed, setEditingBed] = useState<Bed | null>(null);
   const [formData, setFormData] = useState<CreateBedRequest>({
-    type: '',
+  type: 'ward',
     status: 'FREE',
     departmentId: 0,
   });
   const [submitting, setSubmitting] = useState<boolean>(false);
 
-  // API base URL
-  // const API_BASE_URL = 'http://localhost:3121/v1/web';
-  const API_BASE_URL = 'http://10.0.5.179:3121/v1/web';
+  // API base URL (must be exposed to the browser)
+  const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
 
   const loadBeds = async (): Promise<void> => {
     try {
+      if (!API_BASE_URL) {
+        setError('API base URL is not configured. Set NEXT_PUBLIC_API_BASE_URL in .env.local');
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setError(null);
       console.log('Loading beds from:', `${API_BASE_URL}/beds`);
@@ -79,6 +85,7 @@ const BedManagement: React.FC = () => {
 
   const loadDepartments = async (): Promise<void> => {
     try {
+      if (!API_BASE_URL) return;
       const response = await axios.get(`${API_BASE_URL}/departments`);
       console.log('Departments response:', response.data);
       setDepartments(response.data);
@@ -191,7 +198,7 @@ const BedManagement: React.FC = () => {
       status: bed.status,
       departmentId: bed.departmentId,
     } : {
-      type: '',
+      type: 'ward',
       status: 'FREE',
       departmentId: 0,
     });
@@ -203,7 +210,7 @@ const BedManagement: React.FC = () => {
     setIsModalOpen(false);
     setEditingBed(null);
     setFormData({
-      type: '',
+      type: 'ward',
       status: 'FREE',
       departmentId: 0,
     });
@@ -362,13 +369,18 @@ const BedManagement: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Bed Type
                     </label>
-                    <Input
-                      type="text"
-                      value={formData.type}
+                    <select
+                      value={formData.type || 'ward'}
                       onChange={(e) => handleInputChange('type', e.target.value)}
-                      placeholder="e.g., Standard, ICU, VIP"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                       required
-                    />
+                    >
+                      {BED_TYPE_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {option.toUpperCase()}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>

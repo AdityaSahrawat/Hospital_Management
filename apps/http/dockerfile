@@ -1,0 +1,54 @@
+FROM node:18-alpine AS builder
+WORKDIR /app
+
+# Copy root workspace files
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+
+# Copy only the backend app
+COPY apps/http ./apps/http
+
+# Copy only the shared packages http depends on
+COPY packages/db ./packages/db
+COPY packages/types ./packages/types
+COPY packages/typescript-config ./packages/typescript-config
+
+# Install deps for whole workspace
+RUN npm install -g pnpm turbo && pnpm install --no-frozen-lockfile
+
+# Generate Prisma client
+RUN npx prisma generate --schema=packages/db/prisma/schema.prisma
+
+# Build only http app
+RUN pnpm turbo run build --filter=./apps/http
+
+# ----------- Runner -----------
+FROM node:18-alpine AS runner
+WORKDIR /app
+
+COPY --from=builder /app/apps/http/package.json ./apps/http/package.json
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
+
+# Copy runtime packages and built outputs
+COPY --from=builder /app/packages/db/package.json ./packages/db/package.json
+COPY --from=builder /app/packages/db/prisma ./packages/db/prisma
+COPY --from=builder /app/packages/types/package.json ./packages/types/package.json
+COPY --from=builder /app/packages/typescript-config/package.json ./packages/typescript-config/package.json
+
+RUN npm install -g pnpm
+# install prod deps without running scripts (we'll run prisma generate explicitly)
+ENV PRISMA_SKIP_POSTINSTALL=1
+RUN pnpm install --prod --ignore-scripts
+
+# generate prisma client at runtime layer
+RUN npx prisma generate --schema=packages/db/prisma/schema.prisma
+
+# copy dist outputs after install to keep cache efficient
+COPY --from=builder /app/apps/http/dist ./apps/http/dist
+COPY --from=builder /app/packages/db/dist ./packages/db/dist
+COPY --from=builder /app/packages/types/dist ./packages/types/dist
+
+WORKDIR /app/apps/http
+
+EXPOSE 3121
+CMD ["node", "dist/index.js"]

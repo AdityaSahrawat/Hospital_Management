@@ -9,7 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@repo/valid": "workspace:*",
+    "@gradio/client": "^1.17.1",
     "axios": "^1.11.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.540.0",
@@ -19,6 +19,7 @@
     "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
+    "@repo/valid": "workspace:*",
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",

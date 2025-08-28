@@ -233,10 +233,6 @@ webRouter.delete("/beds/:id", async (req, res) => {
   }
 });
 
-/* ==================================================
-   Disease Routes (using PrescribedMedicine)
-================================================== */
-
 // GET all diseases
 webRouter.get("/diseases", async (_req, res) => {
   try {
